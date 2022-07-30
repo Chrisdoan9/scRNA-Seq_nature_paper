@@ -1,0 +1,193 @@
+---
+title: "ScRNA-Seq"
+author: "Chris Doan"
+date: "2022-07-16"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(Seurat)
+library(ggplot2)
+library(tidyverse)
+library(gridExtra)
+```
+
+
+```{r read_file}
+dirs <- list.dirs(path = 'intergrate_sc_RNA_Seq_data', recursive = F, full.names = F)
+
+mtx_obj_s5 <- ReadMtx(mtx = 'GSE137015_RAW/S5_filtered_gene_bc_matrices/matrix.mtx',
+        features = 'GSE137015_RAW/S5_filtered_gene_bc_matrices/genes.tsv',
+        cells = 'GSE137015_RAW/S5_filtered_gene_bc_matrices/barcodes.tsv')
+seurat_mtx_s5 <- CreateSeuratObject(counts = mtx_obj_s5, project = 'CT', min.cells = 5)
+seurat_mtx_s5[['percent.mt']] <- PercentageFeatureSet(seurat_mtx_s5, pattern = '^mt-')
+
+seurat_mtx_s5 <- subset(seurat_mtx_s5, subset = nCount_RNA < 40000 & 
+                                   nFeature_RNA > 500 &
+                                   percent.mt <5)
+
+seurat_mtx_s5 <- NormalizeData(object = seurat_mtx_s5)
+seurat_mtx_s5 <- FindVariableFeatures(object = seurat_mtx_s5)
+
+```
+
+
+```{r pressure, echo=FALSE}
+FeatureScatter(seurat_mtx_s5, feature1 = 'nCount_RNA',feature2 = 'nFeature_RNA') +
+  geom_smooth(method = 'lm')
+```
+
+```{r}
+VlnPlot(seurat_mtx_s5, features = c('nFeature_RNA','nCount_RNA','percent.mt'), ncol = 3) +
+  geom_smooth(method = 'lm')
+
+```
+
+```{r}
+mtx_obj_s6 <- ReadMtx(mtx = 'GSE137015_RAW/S6_filtered_gene_bc_matrices/matrix.mtx',
+                   features = 'GSE137015_RAW/S6_filtered_gene_bc_matrices/genes.tsv',
+                   cells = 'GSE137015_RAW/S6_filtered_gene_bc_matrices/barcodes.tsv')
+seurat_mtx_s6 <- CreateSeuratObject(counts = mtx_obj_s6, project = 'CT', min.cells = 5)
+seurat_mtx_s6[['percent.mt']] <- PercentageFeatureSet(seurat_mtx_s6, pattern = '^mt-')
+seurat_mtx_s6 <- subset(seurat_mtx_s6, subset = nCount_RNA < 40000 & 
+                                   nFeature_RNA > 500 &
+                                   percent.mt <5)
+
+seurat_mtx_s6 <- NormalizeData(object = seurat_mtx_s6)
+seurat_mtx_s6 <- FindVariableFeatures(object = seurat_mtx_s6)
+```
+
+```{r}
+VlnPlot(seurat_mtx_s6, features = c('nFeature_RNA','nCount_RNA','percent.mt'), ncol = 3) +
+  geom_smooth(method = 'lm')
+```
+
+```{r}
+mtx_obj_s7 <- ReadMtx(mtx = 'GSE137015_RAW/S7_filtered_gene_bc_matrices/matrix.mtx',
+                   features = 'GSE137015_RAW/S7_filtered_gene_bc_matrices/genes.tsv',
+                   cells = 'GSE137015_RAW/S7_filtered_gene_bc_matrices/barcodes.tsv')
+seurat_mtx_s7 <- CreateSeuratObject(counts = mtx_obj_s7, project = 'CT', min.cells = 5)
+seurat_mtx_s7[['percent.mt']] <- PercentageFeatureSet(seurat_mtx_s7, pattern = '^mt-')
+seurat_mtx_s7 <- subset(seurat_mtx_s7, subset = nCount_RNA < 40000 & 
+                          nFeature_RNA > 500 &
+                          percent.mt <5)
+
+seurat_mtx_s7 <- NormalizeData(object = seurat_mtx_s7)
+seurat_mtx_s7 <- FindVariableFeatures(object = seurat_mtx_s7)
+```
+
+```{r}
+mtx_obj_s8 <- ReadMtx(mtx = 'GSE137015_RAW/S8_filtered_gene_bc_matrices/matrix.mtx',
+                   features = 'GSE137015_RAW/S8_filtered_gene_bc_matrices/genes.tsv',
+                   cells = 'GSE137015_RAW/S8_filtered_gene_bc_matrices/barcodes.tsv')
+seurat_mtx_s8 <- CreateSeuratObject(counts = mtx_obj_s8, project = 'CT', min.cells = 5)
+seurat_mtx_s8[['percent.mt']] <- PercentageFeatureSet(seurat_mtx_s8, pattern = '^mt-')
+seurat_mtx_s8 <- NormalizeData(object = seurat_mtx_s8)
+seurat_mtx_s8 <- FindVariableFeatures(object = seurat_mtx_s8)
+```
+
+```{r}
+merged_seurat <- merge(seurat_mtx_s5, y = c(seurat_mtx_s6, seurat_mtx_s7, seurat_mtx_s8),
+                       add.cell.ids = c('s5','s6','s7','s8'),
+                       project = 'CT')
+```
+
+```{r}
+merged_seurat$sample <- rownames(merged_seurat@meta.data)
+merged_seurat@meta.data <- separate(merged_seurat@meta.data, col = 'sample', into = c('cell_types','Barcode'),
+                                    sep = '_')
+merged_seurat[['percent.mt']] <- PercentageFeatureSet(merged_seurat, pattern = '^mt-')
+
+merged_seurat_filtered <- subset(merged_seurat, subset = nCount_RNA < 40000 & 
+                          nFeature_RNA > 500 &
+                          percent.mt <5)
+
+```
+
+
+```{r}
+merged_seurat_filtered <- NormalizeData(object = merged_seurat_filtered)
+merged_seurat_filtered <- FindVariableFeatures(object = merged_seurat_filtered)
+merged_seurat_filtered <- ScaleData(object = merged_seurat_filtered)
+merged_seurat_filtered <- RunPCA(object = merged_seurat_filtered)
+ElbowPlot(merged_seurat_filtered)
+merged_seurat_filtered <- FindNeighbors(object = merged_seurat_filtered, dims = 1:20)
+merged_seurat_filtered <- FindClusters(object = merged_seurat_filtered)
+merged_seurat_filtered <- RunUMAP(object = merged_seurat_filtered, dims = 1:20)
+```
+
+```{r}
+p1 <- DimPlot(merged_seurat_filtered, reduction = 'umap', group.by = 'cell_types')
+p2 <- DimPlot(merged_seurat_filtered, reduction = "umap", label = TRUE, repel = TRUE)
+p1 + p2
+```
+
+```{r}
+obj.list1 <- SplitObject(merged_seurat_filtered, split.by = 'cell_types')
+```
+
+```{r}
+features <- SelectIntegrationFeatures(object.list = obj.list1)
+
+features <- SelectIntegrationFeatures(object.list = c(seurat_mtx_s5,seurat_mtx_s6,seurat_mtx_s7,seurat_mtx_s8))
+anchors <- FindIntegrationAnchors(object.list = obj.list1,
+                       anchor.features = features)
+
+```
+
+```{r}
+seurat.integrated <- IntegrateData(anchorset = anchors)
+seurat.integrated <- ScaleData(object = seurat.integrated)
+seurat.integrated <- RunPCA(object = seurat.integrated)
+seurat.integrated <- RunUMAP(object = seurat.integrated, dims = 1:50)
+```
+
+```{r}
+p5 <- DimPlot(seurat.integrated, reduction = 'umap', group.by = 'cell_types')
+p6 <- DimPlot(merged_seurat_filtered, reduction = "umap", label = TRUE, repel = TRUE)
+p5+p6
+```
+
+```{r}
+immune.anchors <- FindIntegrationAnchors(object.list = c(seurat_mtx_s5,seurat_mtx_s6,seurat_mtx_s7,seurat_mtx_s8),anchor.features = features)
+
+immune.combined <- IntegrateData(anchorset = anchors)
+
+immune.combined$sample <- rownames(immune.combined@meta.data)
+immune.combined@meta.data <- separate(immune.combined@meta.data, col = 'sample', into = c('cell_types','Barcode'),
+                                    sep = '_')
+DefaultAssay(immune.combined) <- "integrated"
+```
+
+```{r}
+immune.combined <- ScaleData(immune.combined, verbose = FALSE)
+immune.combined <- RunPCA(immune.combined, npcs = 30, verbose = FALSE)
+immune.combined <- RunUMAP(immune.combined, reduction = "pca", dims = 1:30)
+immune.combined <- FindNeighbors(immune.combined, reduction = "pca", dims = 1:30)
+immune.combined <- FindClusters(immune.combined, resolution = 0.5)
+```
+
+```{r}
+DefaultAssay(immune.combined) <- "RNA"
+
+```
+
+```{r}
+FeaturePlot(immune.combined, features = c("Pdcd1", "Havcr2", "Gzmb", "Id2", "Batf", "Ifng"
+                                          ), min.cutoff = "q9")
+```
+
+## Biological conclusions:
+
+After checking quality control, all samples are good for downstream analysis.
+We have samples from wild-type and knock-out cells so I perform scRNA-Seq integration.
+
+Cells from s5 and s6 have similar sources of variation, and cells from s7 and s8 have similar sources of variation. 
+The algorithms identify a total of 15 clusters of cells. 
+Cells from s8 samples have the highest sources of variation.
+Many cells from s7 and s8 samples separate from s5 and s6 samples.
+
+From FeaturePlot genes of interest (Pdcd1, Havcr2, Gzmb, Id2, Batf, Ifng), we see different expression levels of these marker genes in all cells from wild-type and knockouts cells. Gzmb gene has the expression level highest.
